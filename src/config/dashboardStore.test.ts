@@ -1,22 +1,42 @@
 import { describe, expect, it } from 'vitest';
-import { DEMO_FIELDS } from '../mock/generateCards';
-import { defaultDashboard } from './dashboardStore';
+import { parseDashboard } from './dashboardStore';
 
-describe('defaultDashboard', () => {
-  it('monta as visões a partir dos campos do pipe', () => {
-    const d = defaultDashboard(DEMO_FIELDS);
-    const titles = d.views.map((v) => v.title);
-    expect(titles).toContain('Valor Total (soma)');
-    expect(titles).toContain('Valor Total por Estado');
-    expect(titles).toContain('Cards por mês de Data Limite');
-    expect(titles).toContain('Top 10 Empresa por Valor Total');
-    expect(titles).toContain('Cards por Cidade');
-    expect(d.layout.map((l) => l.i)).toEqual(d.views.map((v) => v.id));
+const view = {
+  id: 'v1',
+  title: 'T',
+  chart: 'bar',
+  dimension: { kind: 'phase' },
+  metric: { kind: 'count' },
+  filters: [],
+};
+
+describe('parseDashboard', () => {
+  it('aceita uma configuração válida em texto', () => {
+    const raw = JSON.stringify({ version: 1, views: [view], layout: [{ i: 'v1', x: 0, y: 0, w: 6, h: 5 }] });
+    expect(parseDashboard(raw)?.views).toHaveLength(1);
   });
 
-  it('funciona com pipe sem campos', () => {
-    const d = defaultDashboard([]);
-    expect(d.views.length).toBeGreaterThanOrEqual(4);
-    expect(d.views.every((v) => v.metric.kind === 'count')).toBe(true);
+  it('descarta visões inválidas e posições órfãs', () => {
+    const parsed = parseDashboard({
+      version: 1,
+      views: [view, { id: 'v2', chart: 'radar' }, null],
+      layout: [
+        { i: 'v1', x: 0, y: 0, w: 6, h: 5 },
+        { i: 'v2', x: 0, y: 0, w: 6, h: 5 },
+      ],
+    });
+    expect(parsed?.views.map((v) => v.id)).toEqual(['v1']);
+    expect(parsed?.layout.map((l) => l.i)).toEqual(['v1']);
+  });
+
+  it('cria posição para visão sem layout', () => {
+    expect(parseDashboard({ version: 1, views: [view], layout: [] })?.layout).toEqual([
+      expect.objectContaining({ i: 'v1' }),
+    ]);
+  });
+
+  it('recusa texto inválido e versão desconhecida', () => {
+    expect(parseDashboard('{')).toBeNull();
+    expect(parseDashboard({ version: 2, views: [], layout: [] })).toBeNull();
   });
 });

@@ -1,4 +1,5 @@
 import type { CardRecord } from '../analytics/types';
+import { isCardId } from '../lib/parse';
 import { mapCard } from '../pipefy/mapCard';
 import { ALL_CARDS, type AllCardsResponse, cardsByIdQuery, type RawCard } from '../pipefy/queries';
 import type { PipefyClient } from '../pipefy/sdk';
@@ -7,7 +8,6 @@ import type { DashboardDb } from './db';
 export interface SyncProgress {
   phase: 'idle' | 'full' | 'incremental';
   loaded: number;
-  /** Total esperado, quando conhecido (contagem do pipe). */
   expected?: number;
   pages: number;
 }
@@ -20,9 +20,8 @@ export interface ChangeEntry {
 
 export interface ChangesResponse {
   changes: ChangeEntry[];
-  /** Hora do servidor; vira o próximo `since`, sem depender do relógio do navegador. */
+  /** Hora do servidor: vira o próximo `since`, sem depender do relógio do navegador. */
   now: string;
-  /** Mudanças demais desde `since`: o app faz uma recarga completa. */
   truncated?: boolean;
 }
 
@@ -33,73 +32,66 @@ interface FullLoadState {
   startedAt: string;
 }
 
-const DAY_MS = 86_400_000;
-const BATCH_BY_ID = 20;
-
 export interface SyncOptions {
-  /** URL do endpoint de mudanças do Worker. Sem ela, o incremental fica só na reconciliação. */
   changesUrl?: string;
   onProgress?: (p: SyncProgress) => void;
-  /** Chamado a cada lote gravado, para os gráficos se atualizarem durante a carga. */
   onData?: () => void;
   fetchImpl?: typeof fetch;
   now?: () => Date;
 }
 
-/** Copia os cards do Pipefy para o cache do usuário e mantém o cache atualizado. */
+const DAY_MS = 86_400_000;
+const BATCH_BY_ID = 20;
+const NOTIFY_EVERY_PAGES = 10;
+const META = {
+  fullLoad: 'fullLoad',
+  lastFullSync: 'lastFullSync',
+  lastSync: 'lastSync',
+  cardFormat: 'cardFormat',
+} as const;
+
 export class SyncEngine {
   private running: Promise<void> | null = null;
 
   constructor(
-    private client: PipefyClient,
-    private db: DashboardDb,
-    private opts: SyncOptions = {},
+    private readonly client: PipefyClient,
+    private readonly db: DashboardDb,
+    private readonly opts: SyncOptions = {},
   ) {}
 
-  private now() {
-    return (this.opts.now ?? (() => new Date()))();
-  }
-
-  private progress(p: SyncProgress) {
-    this.opts.onProgress?.(p);
-  }
-
-  /** Evita duas sincronizações ao mesmo tempo. */
-  private exclusive(task: () => Promise<void>): Promise<void> {
-    if (this.running) return this.running;
-    this.running = task().finally(() => {
-      this.running = null;
-    });
-    return this.running;
-  }
-
   async lastSync(): Promise<string | null> {
-    return (await this.db.getMeta<string>('lastSync')) ?? null;
+    return (await this.db.getMeta<string>(META.lastSync)) ?? null;
   }
 
-  /** Decide o que fazer ao abrir o painel: carga completa, retomar, reconciliar ou só o incremental. */
+  async ensureFormat(format: number): Promise<void> {
+    if ((await this.db.getMeta<number>(META.cardFormat)) === format) return;
+    await this.resetCache();
+    await this.db.setMeta(META.cardFormat, format);
+  }
+
+  async resetCache(): Promise<void> {
+    await this.db.cards.clear();
+    await this.db.meta.bulkDelete([META.fullLoad, META.lastFullSync, META.lastSync]);
+  }
+
   start(expected?: number): Promise<void> {
     return this.exclusive(async () => {
-      const pending = await this.db.getMeta<FullLoadState>('fullLoad');
-      const lastFull = await this.db.getMeta<string>('lastFullSync');
-      if (pending || !lastFull) {
-        await this.runFullLoad(expected);
-        return;
-      }
+      const pending = await this.db.getMeta<FullLoadState>(META.fullLoad);
+      const lastFull = await this.db.getMeta<string>(META.lastFullSync);
+      if (pending || !lastFull) return this.runFullLoad(expected);
+
       try {
         await this.runIncremental();
       } catch (err) {
-        // Worker fora do ar não impede a reconciliação nem o uso do cache.
         console.warn('[dashboard] incremental falhou', err);
       }
       if (this.now().getTime() - Date.parse(lastFull) > DAY_MS) await this.runFullLoad(expected);
     });
   }
 
-  /** Recarga completa sob demanda (botão "Atualizar tudo"). */
   reloadAll(expected?: number): Promise<void> {
     return this.exclusive(async () => {
-      await this.db.meta.delete('fullLoad');
+      await this.db.meta.delete(META.fullLoad);
       await this.runFullLoad(expected);
     });
   }
@@ -108,94 +100,115 @@ export class SyncEngine {
     return this.exclusive(() => this.runIncremental());
   }
 
-  /**
-   * Carga paginada por cursor. O cursor fica salvo a cada página:
-   * se a aba fechar no meio, a próxima abertura continua de onde parou.
-   */
-  private async runFullLoad(expected?: number): Promise<void> {
-    const resumed = await this.db.getMeta<FullLoadState>('fullLoad');
-    const state: FullLoadState = resumed ?? { cursor: null, loaded: 0, pages: 0, startedAt: this.now().toISOString() };
-    // Só dá para remover cards excluídos quando a passada é completa, do início ao fim.
-    const seen = resumed ? null : new Set<string>();
+  private now(): Date {
+    return this.opts.now?.() ?? new Date();
+  }
 
-    this.progress({ phase: 'full', loaded: state.loaded, expected, pages: state.pages });
-    for (;;) {
-      const data = await this.client.query<AllCardsResponse>(ALL_CARDS, {
+  private exclusive(task: () => Promise<void>): Promise<void> {
+    this.running ??= task().finally(() => {
+      this.running = null;
+    });
+    return this.running;
+  }
+
+  /** O cursor é salvo a cada página: se a aba fechar no meio, a próxima abertura continua dali. */
+  private async runFullLoad(expected?: number): Promise<void> {
+    const resumed = await this.db.getMeta<FullLoadState>(META.fullLoad);
+    const state = resumed ?? { cursor: null, loaded: 0, pages: 0, startedAt: this.now().toISOString() };
+    // Cards excluídos só podem ser detectados numa passada completa, do início ao fim.
+    const seen = resumed ? null : new Set<string>();
+    const report = (phase: SyncProgress['phase']) =>
+      this.opts.onProgress?.({ phase, loaded: state.loaded, expected, pages: state.pages });
+
+    report('full');
+    let hasNext = true;
+    while (hasNext) {
+      const { allCards } = await this.client.query<AllCardsResponse>(ALL_CARDS, {
         pipeId: this.client.pipeId,
         after: state.cursor,
       });
-      const page = data.allCards;
-      const cards = page.edges.map((e) => mapCard(e.node));
+      const cards = allCards.edges.map((e) => mapCard(e.node));
       await this.db.cards.bulkPut(cards);
       cards.forEach((c) => seen?.add(c.id));
 
-      state.cursor = page.pageInfo.endCursor;
+      state.cursor = allCards.pageInfo.endCursor;
       state.loaded += cards.length;
       state.pages += 1;
-      await this.db.setMeta('fullLoad', state);
-      this.progress({ phase: 'full', loaded: state.loaded, expected, pages: state.pages });
-      if (state.pages === 1 || state.pages % 10 === 0) this.opts.onData?.();
-      if (!page.pageInfo.hasNextPage || !state.cursor) break;
+      await this.db.setMeta(META.fullLoad, state);
+      report('full');
+      if (state.pages === 1 || state.pages % NOTIFY_EVERY_PAGES === 0) this.opts.onData?.();
+      hasNext = allCards.pageInfo.hasNextPage && Boolean(state.cursor);
     }
 
     if (seen) {
       const stale = (await this.db.cards.toCollection().primaryKeys()).filter((id) => !seen.has(id));
-      if (stale.length) await this.db.cards.bulkDelete(stale);
+      await this.db.cards.bulkDelete(stale);
     }
-    await this.db.meta.delete('fullLoad');
-    await this.db.setMeta('lastFullSync', state.startedAt);
+    await this.db.meta.delete(META.fullLoad);
+    await this.db.setMeta(META.lastFullSync, state.startedAt);
     const prev = await this.lastSync();
-    if (!prev || prev < state.startedAt) await this.db.setMeta('lastSync', state.startedAt);
+    if (!prev || prev < state.startedAt) await this.db.setMeta(META.lastSync, state.startedAt);
     this.opts.onData?.();
-    this.progress({ phase: 'idle', loaded: state.loaded, expected, pages: state.pages });
+    report('idle');
   }
 
-  /** Pergunta ao Worker quais cards mudaram e busca só esses, com as permissões do usuário. */
   private async runIncremental(): Promise<void> {
-    if (!this.opts.changesUrl) return;
+    const { changesUrl } = this.opts;
+    if (!changesUrl) return;
     const since = await this.lastSync();
-    if (!since) return;
-    const token = await this.client.getAuthToken();
-    if (!token) return;
+    const token = since ? await this.client.getAuthToken() : null;
+    if (!since || !token) return;
 
-    this.progress({ phase: 'incremental', loaded: 0, pages: 0 });
-    const url = new URL(this.opts.changesUrl);
+    this.opts.onProgress?.({ phase: 'incremental', loaded: 0, pages: 0 });
+    const body = await this.fetchChanges(changesUrl, since, token);
+    if (body.truncated) {
+      await this.db.meta.delete(META.fullLoad);
+      return this.runFullLoad();
+    }
+
+    const changes = body.changes.filter((c) => isCardId(c.cardId));
+    const deleted = new Set(changes.filter((c) => c.action === 'card.delete').map((c) => c.cardId));
+    const toFetch = [...new Set(changes.map((c) => c.cardId))].filter((id) => !deleted.has(id));
+    await this.db.cards.bulkDelete([...deleted]);
+
+    for (let i = 0; i < toFetch.length; i += BATCH_BY_ID) {
+      await this.refreshCards(toFetch.slice(i, i + BATCH_BY_ID));
+      this.opts.onProgress?.({
+        phase: 'incremental',
+        loaded: Math.min(i + BATCH_BY_ID, toFetch.length),
+        expected: toFetch.length,
+        pages: i / BATCH_BY_ID + 1,
+      });
+    }
+
+    await this.db.setMeta(META.lastSync, body.now);
+    if (changes.length) this.opts.onData?.();
+    this.opts.onProgress?.({ phase: 'idle', loaded: toFetch.length, pages: 0 });
+  }
+
+  private async fetchChanges(changesUrl: string, since: string, token: string): Promise<ChangesResponse> {
+    const url = new URL(changesUrl);
     url.searchParams.set('pipeId', this.client.pipeId);
     url.searchParams.set('since', since);
     const res = await (this.opts.fetchImpl ?? fetch)(url.toString(), {
       headers: { Authorization: `Bearer ${token}` },
     });
     if (!res.ok) throw new Error(`Endpoint de mudanças respondeu ${res.status}`);
-    const body = (await res.json()) as ChangesResponse;
-    if (body.truncated) {
-      await this.db.meta.delete('fullLoad');
-      await this.runFullLoad();
-      return;
-    }
+    return (await res.json()) as ChangesResponse;
+  }
 
-    const deleted = new Set(body.changes.filter((c) => c.action === 'card.delete').map((c) => c.cardId));
-    const toFetch = [...new Set(body.changes.map((c) => c.cardId))].filter((id) => !deleted.has(id));
-    if (deleted.size) await this.db.cards.bulkDelete([...deleted]);
-
-    let loaded = 0;
-    for (let i = 0; i < toFetch.length; i += BATCH_BY_ID) {
-      const ids = toFetch.slice(i, i + BATCH_BY_ID);
-      const data = await this.client.query<Record<string, RawCard | null>>(cardsByIdQuery(ids));
-      const found: CardRecord[] = [];
-      const missing: string[] = [];
-      ids.forEach((id, idx) => {
-        const raw = data[`c${idx}`];
-        if (raw) found.push(mapCard(raw));
-        else missing.push(id); // excluído ou sem permissão para este usuário
-      });
-      await this.db.cards.bulkPut(found);
-      if (missing.length) await this.db.cards.bulkDelete(missing);
-      loaded += ids.length;
-      this.progress({ phase: 'incremental', loaded, expected: toFetch.length, pages: i / BATCH_BY_ID + 1 });
-    }
-
-    await this.db.setMeta('lastSync', body.now);
-    if (body.changes.length) this.opts.onData?.();
-    this.progress({ phase: 'idle', loaded, pages: 0 });
+  /** Card que não volta foi excluído ou deixou de ser visível para este usuário. */
+  private async refreshCards(ids: string[]): Promise<void> {
+    const { query, variables } = cardsByIdQuery(ids);
+    const data = await this.client.query<Record<string, RawCard | null>>(query, variables);
+    const found: CardRecord[] = [];
+    const missing: string[] = [];
+    ids.forEach((id, i) => {
+      const raw = data[`c${i}`];
+      if (raw) found.push(mapCard(raw));
+      else missing.push(id);
+    });
+    await this.db.cards.bulkPut(found);
+    await this.db.cards.bulkDelete(missing);
   }
 }

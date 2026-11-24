@@ -4,7 +4,6 @@ import react from '@vitejs/plugin-react';
 
 export default defineConfig({
   plugins: [react()],
-  // Caminhos relativos: o app funciona servido de qualquer pasta (túnel, Workers).
   base: './',
   server: { port: 5173, host: true, allowedHosts: ['.trycloudflare.com'], cors: { origin: 'https://app.pipefy.com' } },
   build: {
@@ -14,8 +13,9 @@ export default defineConfig({
         dashboard: resolve(__dirname, 'dashboard.html'),
       },
       output: {
-        // ECharts em arquivo próprio: muda pouco, então fica em cache no navegador entre deploys.
-        manualChunks: (id) => (id.includes('node_modules/echarts') || id.includes('node_modules/zrender') ? 'echarts' : undefined),
+        // ECharts muda pouco: em arquivo próprio, fica no cache do navegador entre deploys.
+        manualChunks: (id) =>
+          id.includes('node_modules/echarts') || id.includes('node_modules/zrender') ? 'echarts' : undefined,
       },
     },
     chunkSizeWarningLimit: 700,

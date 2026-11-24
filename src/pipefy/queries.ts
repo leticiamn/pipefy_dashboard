@@ -1,5 +1,4 @@
-// Todas as consultas têm nome (operationName) para aparecerem identificadas no API Usage Stats do Pipefy.
-// Só os campos que os gráficos usam: menos campos, menos complexidade por página.
+// Consultas nomeadas aparecem identificadas no API Usage Stats do Pipefy.
 
 export const PAGE_SIZE = 50;
 
@@ -12,32 +11,79 @@ export const CARD_FIELDS = /* GraphQL */ `
     finished_at
     due_date
     done
-    current_phase { id name }
-    labels { name }
-    assignees { name }
-    fields { field { id type } value }
-  }
-`;
-
-export const PIPE_META = /* GraphQL */ `
-  query DashboardPipeMeta($pipeId: ID!) {
-    me { id name }
-    pipe(id: $pipeId) {
+    current_phase {
       id
       name
-      phases { id name fields { id label type } }
-      start_form_fields { id label type }
-      labels { id name }
+    }
+    labels {
+      name
+    }
+    assignees {
+      name
+    }
+    fields {
+      field {
+        id
+        type
+      }
+      value
     }
   }
 `;
 
-/** Separada da PIPE_META: se a contagem falhar, o app continua funcionando. */
+/** Separada da PIPE_META: se o campo não existir no schema, o painel segue com o fuso do navegador. */
+export const USER_TIME_ZONE = /* GraphQL */ `
+  query DashboardUserTimeZone {
+    me {
+      timeZone
+    }
+  }
+`;
+
+export interface UserTimeZoneResponse {
+  me: { timeZone: string | null };
+}
+
+export const PIPE_META = /* GraphQL */ `
+  query DashboardPipeMeta($pipeId: ID!) {
+    me {
+      id
+      name
+    }
+    pipe(id: $pipeId) {
+      id
+      name
+      phases {
+        id
+        name
+        fields {
+          id
+          label
+          type
+        }
+      }
+      start_form_fields {
+        id
+        label
+        type
+      }
+      labels {
+        id
+        name
+      }
+    }
+  }
+`;
+
 export const PIPE_COUNTS = /* GraphQL */ `
   query DashboardPipeCounts($pipeId: ID!) {
     pipe(id: $pipeId) {
       cards_count
-      phases { id name cards_count }
+      phases {
+        id
+        name
+        cards_count
+      }
     }
   }
 `;
@@ -52,10 +98,11 @@ export const ALL_CARDS = /* GraphQL */ `
   ${CARD_FIELDS}
 `;
 
-/** Busca vários cards por id numa consulta só, com aliases (c0, c1, ...). */
-export function cardsByIdQuery(ids: string[]): string {
-  const parts = ids.map((id, i) => `c${i}: card(id: ${JSON.stringify(id)}) { ...DashboardCardFields }`);
-  return `query DashboardCardsById {\n${parts.join('\n')}\n}\n${CARD_FIELDS}`;
+export function cardsByIdQuery(ids: string[]): { query: string; variables: Record<string, string> } {
+  const params = ids.map((_, i) => `$c${i}: ID!`).join(', ');
+  const parts = ids.map((_, i) => `  c${i}: card(id: $c${i}) { ...DashboardCardFields }`).join('\n');
+  const variables = Object.fromEntries(ids.map((id, i) => [`c${i}`, id]));
+  return { query: `query DashboardCardsById(${params}) {\n${parts}\n}\n${CARD_FIELDS}`, variables };
 }
 
 export interface RawCard {

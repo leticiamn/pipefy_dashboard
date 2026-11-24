@@ -50,10 +50,12 @@ npm run deploy
 Depois, registre o webhook do pipe com um token de **Service Account** (só uma vez):
 
 ```bash
-PIPEFY_TOKEN=... PIPE_ID=307436009 \
-WEBHOOK_URL="https://<seu-worker>.workers.dev/webhooks/pipefy/<WEBHOOK_SECRET>?pipeId=307436009" \
+PIPEFY_TOKEN=... PIPE_ID=307436009 WEBHOOK_SECRET=... \
+WORKER_URL="https://<seu-worker>.workers.dev" \
 node scripts/register-webhook.mjs
 ```
+
+O segredo vai no header `X-Webhook-Secret`. Se o Pipefy recusar headers no webhook, use o segredo no caminho (`/webhooks/pipefy/<segredo>?pipeId=...`), que o Worker também aceita.
 
 Por fim, registre o app no Pipefy com `https://<seu-worker>.workers.dev/manifest.json`.
 
@@ -75,11 +77,11 @@ scripts/register-webhook.mjs
 
 ## Scripts
 
-| Comando | O que faz |
-| --- | --- |
-| `npm run dev` | Servidor de desenvolvimento |
-| `npm test` | Testes (Vitest) |
-| `npm run typecheck` | Checagem de tipos do app e do Worker |
-| `npm run build` | Build de produção em `dist/` |
+| Comando              | O que faz                                            |
+| -------------------- | ---------------------------------------------------- |
+| `npm run dev`        | Servidor de desenvolvimento                          |
+| `npm test`           | Testes (Vitest)                                      |
+| `npm run typecheck`  | Checagem de tipos do app e do Worker                 |
+| `npm run build`      | Build de produção em `dist/`                         |
 | `npm run worker:dev` | Worker local com `wrangler dev` (rode o build antes) |
-| `npm run deploy` | Build e publicação no Cloudflare Workers |
+| `npm run deploy`     | Build e publicação no Cloudflare Workers             |

@@ -6,16 +6,13 @@ export interface MetaRow {
   value: unknown;
 }
 
-/** Versão do formato do cache. Mudou o formato do card? Suba o número e o cache é recriado. */
-export const SCHEMA_VERSION = 1;
-
 export class DashboardDb extends Dexie {
   cards!: Table<CardRecord, string>;
   meta!: Table<MetaRow, string>;
 
   constructor(name: string) {
     super(name);
-    this.version(SCHEMA_VERSION).stores({
+    this.version(1).stores({
       cards: '&id, phaseId',
       meta: '&key',
     });
@@ -30,7 +27,6 @@ export class DashboardDb extends Dexie {
   }
 }
 
-/** Uma base por usuário e por pipe: dois usuários no mesmo navegador nunca compartilham dados. */
 export function dbName(userId: string, pipeId: string): string {
   return `pipefy-dashboard:${userId}:${pipeId}`;
 }

@@ -1,7 +1,7 @@
 import type { AggregateResult, ViewConfig } from './types';
 
 export type WorkerRequest =
-  | { type: 'open'; dbName: string }
+  | { type: 'open'; dbName: string; timeZone: string }
   | { type: 'invalidate' }
   | { type: 'aggregate'; requestId: number; view: ViewConfig };
 

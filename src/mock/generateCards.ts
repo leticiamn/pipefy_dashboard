@@ -21,7 +21,6 @@ export const DEMO_PHASES = [
   { id: 'ph-6', name: 'Concluído' },
 ];
 
-// Mesmos tipos de campo do pipe do case (formulário inicial).
 export const DEMO_FIELDS = [
   { id: 'nome_contato', label: 'Nome Contato', type: 'short_text' },
   { id: 'email', label: 'Email', type: 'email' },
@@ -34,10 +33,32 @@ export const DEMO_FIELDS = [
 
 const LABELS = ['Urgente', 'Cliente VIP', 'Retrabalho', 'Novo cliente', 'Renovação'];
 const PEOPLE = ['Ana Souza', 'Bruno Lima', 'Carla Dias', 'Diego Melo', 'Elisa Rocha', 'Felipe Nunes', 'Gabriela Reis'];
-const EMPRESAS = ['Cyberdyne S.A.', 'Acme Ltda.', 'Umbrella Corp.', 'Initech', 'Globex', 'Stark Indústrias', 'Wayne Holding', 'Soylent', 'Hooli', 'Vandelay', 'Wonka', 'Tyrell'];
+const EMPRESAS = [
+  'Cyberdyne S.A.',
+  'Acme Ltda.',
+  'Umbrella Corp.',
+  'Initech',
+  'Globex',
+  'Stark Indústrias',
+  'Wayne Holding',
+  'Soylent',
+  'Hooli',
+  'Vandelay',
+  'Wonka',
+  'Tyrell',
+];
 const CIDADES: Array<[string, string]> = [
-  ['Porto Alegre', 'RS'], ['Caxias do Sul', 'RS'], ['São Paulo', 'SP'], ['Campinas', 'SP'], ['Rio de Janeiro', 'RJ'],
-  ['Belo Horizonte', 'MG'], ['Curitiba', 'PR'], ['Florianópolis', 'SC'], ['Salvador', 'BA'], ['Recife', 'PE'], ['Brasília', 'DF'],
+  ['Porto Alegre', 'RS'],
+  ['Caxias do Sul', 'RS'],
+  ['São Paulo', 'SP'],
+  ['Campinas', 'SP'],
+  ['Rio de Janeiro', 'RJ'],
+  ['Belo Horizonte', 'MG'],
+  ['Curitiba', 'PR'],
+  ['Florianópolis', 'SC'],
+  ['Salvador', 'BA'],
+  ['Recife', 'PE'],
+  ['Brasília', 'DF'],
 ];
 
 function pick<T>(r: () => number, list: T[]): T {
@@ -47,10 +68,9 @@ function pick<T>(r: () => number, list: T[]): T {
 export function generateCards(count: number, seed = 42, now = Date.UTC(2026, 10, 20)): RawCard[] {
   const r = rng(seed);
   const cards: RawCard[] = [];
-  const span = 540 * 86_400_000; // ~18 meses
+  const span = 540 * 86_400_000;
   for (let i = 0; i < count; i++) {
     const created = now - Math.floor(r() * r() * span);
-    // Fases mais adiantadas para cards mais antigos
     const age = (now - created) / span;
     const phaseIdx = Math.min(DEMO_PHASES.length - 1, Math.floor(age * 6 + r() * 2.5));
     const phase = DEMO_PHASES[phaseIdx];

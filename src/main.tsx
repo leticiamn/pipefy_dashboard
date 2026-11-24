@@ -7,9 +7,10 @@ import './ui/styles.css';
 
 let mounted = false;
 function mount(client: PipefyClient) {
-  if (mounted) return;
+  const root = document.getElementById('root');
+  if (mounted || !root) return;
   mounted = true;
-  createRoot(document.getElementById('root')!).render(
+  createRoot(root).render(
     <StrictMode>
       <App client={client} />
     </StrictMode>,
@@ -17,14 +18,12 @@ function mount(client: PipefyClient) {
 }
 
 const params = new URLSearchParams(window.location.search);
-const insidePipefy = Boolean(window.PipefyApp && params.get('appID'));
+const PipefyApp = params.get('appID') ? window.PipefyApp : undefined;
 
-if (insidePipefy) {
+if (PipefyApp) {
   // Pipe view: o Pipefy exige PipefyApp.render, senão volta para o Kanban.
-  const PipefyApp = window.PipefyApp!;
   const p = PipefyApp.init();
   PipefyApp.render(() => mount(sdkClient(p, PipefyApp.registerListener?.bind(PipefyApp))));
 } else {
-  // Fora do Pipefy: modo demo com 20 mil cards gerados (?cards=5000 muda a quantidade).
   mount(demoClient(Number(params.get('cards')) || 20_000));
 }

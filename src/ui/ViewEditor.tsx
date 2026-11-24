@@ -1,7 +1,11 @@
-import { useState } from 'react';
-import type { ChartType, Dimension, Filter, Metric, ViewConfig } from '../analytics/types';
+import { useMemo, useState } from 'react';
+import { isComplete } from '../analytics/filters';
+import type { ChartType, Dimension, FilterRule, Metric, ViewConfig } from '../analytics/types';
 import { isDateField, isGroupableField, isNumericField } from '../pipefy/mapCard';
 import type { FieldMeta } from '../pipefy/queries';
+import { buildFilterFields } from './filters/filterFields';
+import { FilterRules } from './filters/FilterRules';
+import { useEscape } from './hooks/useEscape';
 import { CHART_LABELS } from './labels';
 
 interface Props {
@@ -28,7 +32,9 @@ function decodeDim(v: string): Dimension {
   const [kind, arg] = v.split(/:(.*)/s);
   if (kind === 'field') {
     const at = arg.lastIndexOf('@');
-    return at > 0 ? { kind: 'field', fieldId: arg.slice(0, at), grain: arg.slice(at + 1) as 'day' | 'week' | 'month' } : { kind: 'field', fieldId: arg };
+    return at > 0
+      ? { kind: 'field', fieldId: arg.slice(0, at), grain: arg.slice(at + 1) as 'day' | 'week' | 'month' }
+      : { kind: 'field', fieldId: arg };
   }
   if (kind === 'createdAt' || kind === 'finishedAt') return { kind, grain: arg as 'day' | 'week' | 'month' };
   return { kind } as Dimension;
@@ -44,45 +50,43 @@ function decodeMetric(v: string): Metric {
   return { kind } as Metric;
 }
 
-const getFilter = <K extends Filter['kind']>(filters: Filter[], kind: K) =>
-  filters.find((f) => f.kind === kind) as Extract<Filter, { kind: K }> | undefined;
-
 export function ViewEditor({ initial, phases, fields, onSave, onCancel }: Props) {
+  useEscape(onCancel);
   const [title, setTitle] = useState(initial.title);
   const [chart, setChart] = useState<ChartType>(initial.chart);
   const [dim, setDim] = useState(encodeDim(initial.dimension));
   const [metric, setMetric] = useState(encodeMetric(initial.metric));
-  const [phaseIds, setPhaseIds] = useState<string[]>(getFilter(initial.filters, 'phase')?.values ?? []);
-  const [status, setStatus] = useState<string>(getFilter(initial.filters, 'status')?.values[0] ?? '');
-  const [from, setFrom] = useState(getFilter(initial.filters, 'createdBetween')?.from ?? '');
-  const [to, setTo] = useState(getFilter(initial.filters, 'createdBetween')?.to ?? '');
+  const [rules, setRules] = useState<FilterRule[]>(initial.filters);
   const [limit, setLimit] = useState(initial.limit ?? 12);
 
   const numeric = fields.filter(isNumericField);
   const groupable = fields.filter(isGroupableField);
   const dates = fields.filter(isDateField);
+  const filterFields = useMemo(() => buildFilterFields(fields), [fields]);
   const isKpi = chart === 'kpi';
 
   function submit(e: React.FormEvent) {
     e.preventDefault();
-    const filters: Filter[] = [];
-    if (phaseIds.length) filters.push({ kind: 'phase', values: phaseIds });
-    if (status) filters.push({ kind: 'status', values: [status as 'open' | 'done'] });
-    if (from || to) filters.push({ kind: 'createdBetween', from: from || undefined, to: to || undefined });
     onSave({
       ...initial,
       title: title.trim() || 'Sem título',
       chart,
       dimension: isKpi ? { kind: 'none' } : decodeDim(dim),
       metric: decodeMetric(metric),
-      filters,
+      filters: rules.filter(isComplete),
       limit: isKpi ? undefined : Math.max(0, Number(limit) || 0),
     });
   }
 
   return (
     <div className="modal-backdrop" role="presentation" onClick={onCancel}>
-      <form className="modal" role="dialog" aria-label="Configurar visão" onSubmit={submit} onClick={(e) => e.stopPropagation()}>
+      <form
+        className="modal"
+        role="dialog"
+        aria-label="Configurar visão"
+        onSubmit={submit}
+        onClick={(e) => e.stopPropagation()}
+      >
         <h2>Configurar visão</h2>
 
         <label>
@@ -166,38 +170,8 @@ export function ViewEditor({ initial, phases, fields, onSave, onCancel }: Props)
         </div>
 
         <fieldset>
-          <legend>Filtros</legend>
-          <div className="row">
-            <label>
-              Situação
-              <select value={status} onChange={(e) => setStatus(e.target.value)}>
-                <option value="">Todos</option>
-                <option value="open">Em aberto</option>
-                <option value="done">Concluídos</option>
-              </select>
-            </label>
-            <label>
-              Criado de
-              <input type="date" value={from} onChange={(e) => setFrom(e.target.value)} />
-            </label>
-            <label>
-              até
-              <input type="date" value={to} onChange={(e) => setTo(e.target.value)} />
-            </label>
-          </div>
-          <div className="phase-list" aria-label="Fases">
-            {phases.map((p) => (
-              <label key={p.id} className="check">
-                <input
-                  type="checkbox"
-                  checked={phaseIds.includes(p.id)}
-                  onChange={(e) => setPhaseIds((ids) => (e.target.checked ? [...ids, p.id] : ids.filter((id) => id !== p.id)))}
-                />
-                {p.name}
-              </label>
-            ))}
-          </div>
-          <p className="hint">Nenhuma fase marcada = todas as fases.</p>
+          <legend>Filtros desta visão</legend>
+          <FilterRules rules={rules} fields={filterFields} phases={phases} onChange={setRules} />
         </fieldset>
 
         <div className="modal-actions">

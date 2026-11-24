@@ -1,41 +1,61 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import ReactEChartsCore from 'echarts-for-react/lib/core';
 import * as echarts from 'echarts/core';
 import { BarChart, LineChart, PieChart } from 'echarts/charts';
 import { GridComponent, LegendComponent, TooltipComponent } from 'echarts/components';
+import { LegacyGridContainLabel } from 'echarts/features';
 import { CanvasRenderer } from 'echarts/renderers';
-import type { AggregateResult, ViewConfig } from '../analytics/types';
+import { presentResult } from '../analytics/present';
+import type { AggregateResult, FilterRule, ViewConfig } from '../analytics/types';
 import type { AggregationClient } from '../analytics/workerClient';
 import type { FieldMeta } from '../pipefy/queries';
+import { chartOption } from './chartOptions';
+import { usableRules } from './filters/filterFields';
 import { formatNumber, metricLabel } from './labels';
 
-echarts.use([BarChart, LineChart, PieChart, GridComponent, LegendComponent, TooltipComponent, CanvasRenderer]);
-
-const PALETTE = ['#3B5BDB', '#F08C00', '#2F9E44', '#AE3EC9', '#E8590C', '#1098AD', '#C2255C', '#5C940D', '#868E96'];
+echarts.use([
+  BarChart,
+  LineChart,
+  PieChart,
+  GridComponent,
+  LegendComponent,
+  TooltipComponent,
+  LegacyGridContainLabel,
+  CanvasRenderer,
+]);
 
 interface Props {
   view: ViewConfig;
   agg: AggregationClient;
   dataVersion: number;
+  globalFilters: FilterRule[];
+  knownFields: ReadonlySet<string>;
+  phaseOrder: string[];
   fields: FieldMeta[];
   onEdit: () => void;
   onRemove: () => void;
 }
 
-export function ChartWidget({ view, agg, dataVersion, fields, onEdit, onRemove }: Props) {
+export function ChartWidget(props: Props) {
+  const { view, agg, dataVersion, globalFilters, knownFields, phaseOrder, fields, onEdit, onRemove } = props;
   const [result, setResult] = useState<AggregateResult | null>(null);
   const [error, setError] = useState<string | null>(null);
+
+  const effective = useMemo(
+    () => ({ ...view, filters: [...globalFilters, ...usableRules(view.filters, knownFields)] }),
+    [view, globalFilters, knownFields],
+  );
 
   useEffect(() => {
     let alive = true;
     agg
-      .aggregate(view)
-      .then((r) => alive && (setResult(r), setError(null)))
+      .aggregate(effective)
+      .then((r) => alive && (setResult(presentResult(view, r, phaseOrder)), setError(null)))
       .catch((e: Error) => alive && setError(e.message));
     return () => {
       alive = false;
     };
-  }, [agg, view, dataVersion]);
+  }, [agg, effective, dataVersion, view, phaseOrder]);
 
   return (
     <div className="widget">
@@ -97,45 +117,6 @@ function ChartBody({ view, result, fields }: { view: ViewConfig; result: Aggrega
     );
   }
 
-  const labels = result.rows.map((r) => r.label);
-  const values = result.rows.map((r) => r.value);
-  const tooltip = { trigger: view.chart === 'pie' ? 'item' : 'axis', valueFormatter: (v: number) => formatNumber(v) };
-  const option =
-    view.chart === 'pie'
-      ? {
-          color: PALETTE,
-          tooltip,
-          legend: { type: 'scroll', bottom: 0 },
-          series: [
-            {
-              type: 'pie',
-              radius: ['40%', '70%'],
-              top: 0,
-              bottom: 28,
-              data: result.rows.map((r) => ({ name: r.label, value: r.value })),
-              label: { formatter: '{d}%' },
-            },
-          ],
-        }
-      : {
-          color: PALETTE,
-          tooltip,
-          grid: { left: 8, right: 16, top: 16, bottom: 8, containLabel: true },
-          xAxis: {
-            type: 'category',
-            data: labels,
-            axisLabel:
-              view.chart === 'bar'
-                ? { interval: 0, rotate: labels.length > 6 ? 30 : 0, width: 110, overflow: 'truncate' }
-                : { hideOverlap: true },
-          },
-          yAxis: { type: 'value', axisLabel: { formatter: (v: number) => formatNumber(v) } },
-          series: [
-            view.chart === 'line'
-              ? { type: 'line', data: values, smooth: true, showSymbol: values.length < 40, areaStyle: { opacity: 0.08 } }
-              : { type: 'bar', data: values, barMaxWidth: 48 },
-          ],
-        };
-
+  const option = chartOption(view.chart, result.rows);
   return <ReactEChartsCore echarts={echarts} option={option} notMerge style={{ height: '100%', width: '100%' }} />;
 }

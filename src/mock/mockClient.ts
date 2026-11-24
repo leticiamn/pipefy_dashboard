@@ -2,10 +2,7 @@ import { PAGE_SIZE, type RawCard } from '../pipefy/queries';
 import type { PipefyClient } from '../pipefy/sdk';
 import { DEMO_FIELDS, DEMO_PHASES, generateCards } from './generateCards';
 
-/**
- * Cliente de demonstração: responde às mesmas consultas do app com 20 mil cards gerados.
- * Serve para rodar e medir o app fora do Pipefy (`npm run dev` e abrir /dashboard.html).
- */
+/** Responde às mesmas consultas do app com cards gerados, para rodar e medir fora do Pipefy. */
 export function demoClient(count = 20_000, latencyMs = 120): PipefyClient {
   const cards = generateCards(count);
   const byId = new Map(cards.map((c) => [c.id, c]));
@@ -29,11 +26,19 @@ export function demoClient(count = 20_000, latencyMs = 120): PipefyClient {
           },
         } as T;
       }
+      if (query.includes('DashboardUserTimeZone')) {
+        return { me: { timeZone: 'Brasilia' } } as T;
+      }
       if (query.includes('DashboardPipeCounts')) {
         const per = new Map<string, number>();
-        cards.forEach((c) => per.set(c.current_phase!.id, (per.get(c.current_phase!.id) ?? 0) + 1));
+        for (const { current_phase } of cards) {
+          if (current_phase) per.set(current_phase.id, (per.get(current_phase.id) ?? 0) + 1);
+        }
         return {
-          pipe: { cards_count: cards.length, phases: DEMO_PHASES.map((p) => ({ ...p, cards_count: per.get(p.id) ?? 0 })) },
+          pipe: {
+            cards_count: cards.length,
+            phases: DEMO_PHASES.map((p) => ({ ...p, cards_count: per.get(p.id) ?? 0 })),
+          },
         } as T;
       }
       if (query.includes('DashboardAllCards')) {
@@ -49,7 +54,7 @@ export function demoClient(count = 20_000, latencyMs = 120): PipefyClient {
       }
       if (query.includes('DashboardCardsById')) {
         const out: Record<string, RawCard | null> = {};
-        for (const m of query.matchAll(/(c\d+): card\(id: "([^"]+)"\)/g)) out[m[1]] = byId.get(m[2]) ?? null;
+        for (const [alias, id] of Object.entries(variables)) out[alias] = byId.get(String(id)) ?? null;
         return out as T;
       }
       throw new Error('Consulta não suportada no modo demo');
@@ -69,9 +74,11 @@ export function demoClient(count = 20_000, latencyMs = 120): PipefyClient {
       try {
         localStorage.setItem(`demo:${key}`, value);
       } catch {
-        /* sem localStorage: fica só em memória */
+        // sem localStorage (modo privado): fica só em memória
       }
     },
-    onCardChange() {},
+    onCardChange() {
+      return () => {};
+    },
   };
 }

@@ -2,7 +2,9 @@ import type { ChartType, Dimension, Metric, TimeGrain } from '../analytics/types
 import type { FieldMeta } from '../pipefy/queries';
 
 export const CHART_LABELS: Record<ChartType, string> = {
-  bar: 'Barras',
+  bar: 'Colunas',
+  hbar: 'Barras',
+  funnel: 'Funil',
   line: 'Linha',
   pie: 'Pizza',
   kpi: 'Número (KPI)',

@@ -1,4 +1,4 @@
-/** Tipos mínimos do Pipefy Apps Client SDK (pipefy-app.js), carregado por <script> no HTML. */
+/** Tipos mínimos do Pipefy Apps Client SDK, carregado por <script> no HTML. */
 export interface GraphQLResult<T> {
   data?: T | null;
   errors?: unknown;
@@ -9,14 +9,22 @@ export interface PipefySdkClient {
   query<T = unknown>(query: string, variables?: Record<string, unknown>): Promise<GraphQLResult<T>>;
   getAuthToken?(): Promise<string>;
   get(scope: 'organization' | 'pipe' | 'card', visibility: 'private' | 'public', key: string): Promise<unknown>;
-  set(scope: 'organization' | 'pipe' | 'card', visibility: 'private' | 'public', key: string, value: string): Promise<unknown>;
+  set(
+    scope: 'organization' | 'pipe' | 'card',
+    visibility: 'private' | 'public',
+    key: string,
+    value: string,
+  ): Promise<unknown>;
 }
 
 interface PipefyAppGlobal {
   init(): PipefySdkClient;
   initCall(features: Record<string, (p: PipefySdkClient, ctx: unknown) => unknown>): void;
   render(callback: () => void): void;
-  registerListener?(event: 'onCardCreated' | 'onCardDeleted' | 'onCardUpdated' | 'onFilterChanged', cb: (payload: unknown) => void): void;
+  registerListener?(
+    event: 'onCardCreated' | 'onCardDeleted' | 'onCardUpdated' | 'onFilterChanged',
+    cb: (payload: unknown) => void,
+  ): void;
 }
 
 declare global {
@@ -25,7 +33,6 @@ declare global {
   }
 }
 
-/** Interface que o resto do app usa. O SDK real e o modo demo implementam a mesma coisa. */
 export interface PipefyClient {
   mode: 'pipefy' | 'demo';
   pipeId: string;
@@ -33,7 +40,7 @@ export interface PipefyClient {
   getAuthToken(): Promise<string | null>;
   getPrivate(key: string): Promise<string | null>;
   setPrivate(key: string, value: string): Promise<void>;
-  onCardChange(cb: () => void): void;
+  onCardChange(cb: () => void): () => void;
 }
 
 export class PipefyQueryError extends Error {
@@ -48,12 +55,11 @@ function describe(errors: unknown): string {
   return String(errors);
 }
 
+const CARD_EVENTS = ['onCardCreated', 'onCardUpdated', 'onCardDeleted'] as const;
+
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
-/**
- * Executa uma consulta com nova tentativa e espera crescente.
- * O SDK nunca rejeita a promise: o erro vem em `errors` na resposta.
- */
+/** O SDK nunca rejeita a promise: o erro vem em `errors` na resposta. */
 export async function withRetry<T>(run: () => Promise<GraphQLResult<T>>, attempts = 4): Promise<T> {
   let lastError: unknown;
   for (let i = 0; i < attempts; i++) {
@@ -65,7 +71,6 @@ export async function withRetry<T>(run: () => Promise<GraphQLResult<T>>, attempt
   throw new PipefyQueryError(lastError);
 }
 
-/** Embrulha o SDK real. Só funciona com o app aberto dentro do Pipefy (parâmetro appID na URL). */
 export function sdkClient(p: PipefySdkClient, registerListener?: PipefyAppGlobal['registerListener']): PipefyClient {
   const pipeId = String(p.app.pipeId ?? '');
   return {
@@ -88,9 +93,13 @@ export function sdkClient(p: PipefySdkClient, registerListener?: PipefyAppGlobal
       await p.set('pipe', 'private', key, value);
     },
     onCardChange(cb) {
-      registerListener?.('onCardCreated', cb);
-      registerListener?.('onCardUpdated', cb);
-      registerListener?.('onCardDeleted', cb);
+      // O SDK não oferece remoção de listener: a inscrição é desativada localmente.
+      let active = true;
+      const handler = () => active && cb();
+      CARD_EVENTS.forEach((event) => registerListener?.(event, handler));
+      return () => {
+        active = false;
+      };
     },
   };
 }

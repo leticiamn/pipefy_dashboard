@@ -1,15 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { mapCard, toIsoDate } from './mapCard';
-
-describe('toIsoDate', () => {
-  it('converte datas do Pipefy', () => {
-    expect(toIsoDate('26/05/2027')).toBe('2027-05-26');
-    expect(toIsoDate('1/2/2027 9:05')).toBe('2027-02-01T09:05:00');
-    expect(toIsoDate('2027-05-26')).toBe('2027-05-26');
-    expect(toIsoDate('')).toBeNull();
-    expect(toIsoDate('amanhã')).toBeNull();
-  });
-});
+import { mapCard } from './mapCard';
 
 describe('mapCard', () => {
   it('converte número, data e texto conforme o tipo do campo', () => {

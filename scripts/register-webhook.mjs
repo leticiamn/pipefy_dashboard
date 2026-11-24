@@ -1,14 +1,16 @@
-// Registra o webhook do pipe apontando para o Worker. Rode uma vez, com um token de Service Account.
-// Uso: PIPEFY_TOKEN=... PIPE_ID=307436009 WEBHOOK_URL="https://<worker>/webhooks/pipefy/<segredo>?pipeId=307436009" node scripts/register-webhook.mjs
-const { PIPEFY_TOKEN, PIPE_ID, WEBHOOK_URL } = process.env;
-if (!PIPEFY_TOKEN || !PIPE_ID || !WEBHOOK_URL) {
-  console.error('Defina PIPEFY_TOKEN, PIPE_ID e WEBHOOK_URL.');
+// Uso: PIPEFY_TOKEN=... PIPE_ID=307436009 WORKER_URL=https://<worker> WEBHOOK_SECRET=... node scripts/register-webhook.mjs
+const { PIPEFY_TOKEN, PIPE_ID, WORKER_URL, WEBHOOK_SECRET } = process.env;
+if (!PIPEFY_TOKEN || !PIPE_ID || !WORKER_URL || !WEBHOOK_SECRET) {
+  console.error('Defina PIPEFY_TOKEN, PIPE_ID, WORKER_URL e WEBHOOK_SECRET.');
   process.exit(1);
 }
 
 const query = `mutation DashboardCreateWebhook($input: CreateWebhookInput!) {
   createWebhook(input: $input) { webhook { id name url actions } }
 }`;
+
+const url = new URL('/webhooks/pipefy', WORKER_URL);
+url.searchParams.set('pipeId', PIPE_ID);
 
 const res = await fetch('https://api.pipefy.com/graphql', {
   method: 'POST',
@@ -19,7 +21,8 @@ const res = await fetch('https://api.pipefy.com/graphql', {
       input: {
         pipe_id: PIPE_ID,
         name: 'pipe-dashboard-changes',
-        url: WEBHOOK_URL,
+        url: url.toString(),
+        headers: { 'X-Webhook-Secret': WEBHOOK_SECRET },
         actions: ['card.create', 'card.move', 'card.field_update', 'card.done', 'card.delete'],
       },
     },

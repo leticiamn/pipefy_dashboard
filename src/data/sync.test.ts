@@ -49,7 +49,10 @@ describe('SyncEngine', () => {
         }),
       );
     });
-    const engine = new SyncEngine(client, db, { changesUrl: 'https://worker.test/api/changes', fetchImpl: fetchImpl as unknown as typeof fetch });
+    const engine = new SyncEngine(client, db, {
+      changesUrl: 'https://worker.test/api/changes',
+      fetchImpl: fetchImpl as unknown as typeof fetch,
+    });
     await engine.incremental();
 
     expect((await db.cards.get('900000001'))?.title).toBe('Pedido #10001');
@@ -63,5 +66,19 @@ describe('SyncEngine', () => {
     await new SyncEngine(demoClient(10, 0), a).start();
     expect(await a.cards.count()).toBe(10);
     expect(await b.cards.count()).toBe(0);
+  });
+});
+
+describe('SyncEngine.ensureFormat', () => {
+  it('limpa o cache quando o formato do card muda', async () => {
+    const db = fresh();
+    const engine = new SyncEngine(demoClient(10, 0), db);
+    await engine.ensureFormat(1);
+    await engine.start();
+    await engine.ensureFormat(1);
+    expect(await db.cards.count()).toBe(10);
+    await engine.ensureFormat(2);
+    expect(await db.cards.count()).toBe(0);
+    expect(await engine.lastSync()).toBeNull();
   });
 });

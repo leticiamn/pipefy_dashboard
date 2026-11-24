@@ -19,16 +19,16 @@ Navegador (pipe view)           Cloudflare Worker
 
 ## Decisões
 
-| Decisão | Motivo |
-| --- | --- |
-| Ler os cards no navegador com `p.query` | Respeita as permissões de cada usuário sem guardar token nenhum |
-| Cache em IndexedDB, uma base por usuário e pipe | O case pede cache no app e separado por usuário; abre o painel na hora |
-| Agregação num Web Worker | Agrupar 20 mil cards fora da thread da tela; a interface recebe só o resultado |
-| Worker de mudanças em vez de cache no servidor | O evento `onCardUpdated` da pipe view só cobre vencimento e a API não filtra por data de alteração; guardar só ids cabe no plano gratuito |
-| Validação do usuário no Worker pela API do Pipefy | O token de `p.getAuthToken()` é testado com `me` e `pipe(id)`: só quem enxerga o pipe recebe a lista |
-| Configuração do painel em `p.set` (private) | Acompanha a pessoa em qualquer navegador; cópia local no IndexedDB |
-| `allCards` com 50 por página e `operationName` em tudo | Menos chamadas que paginar por fase (30 por página) e consumo identificado no API Usage Stats |
-| Cloudflare Workers gratuito | Não desliga por ociosidade nem apaga dados; arquivos estáticos não gastam CPU |
+| Decisão                                                | Motivo                                                                                                                                    |
+| ------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------- |
+| Ler os cards no navegador com `p.query`                | Respeita as permissões de cada usuário sem guardar token nenhum                                                                           |
+| Cache em IndexedDB, uma base por usuário e pipe        | O case pede cache no app e separado por usuário; abre o painel na hora                                                                    |
+| Agregação num Web Worker                               | Agrupar 20 mil cards fora da thread da tela; a interface recebe só o resultado                                                            |
+| Worker de mudanças em vez de cache no servidor         | O evento `onCardUpdated` da pipe view só cobre vencimento e a API não filtra por data de alteração; guardar só ids cabe no plano gratuito |
+| Validação do usuário no Worker pela API do Pipefy      | O token de `p.getAuthToken()` é testado com `me` e `pipe(id)`: só quem enxerga o pipe recebe a lista                                      |
+| Configuração do painel em `p.set` (private)            | Acompanha a pessoa em qualquer navegador; cópia local no IndexedDB                                                                        |
+| `allCards` com 50 por página e `operationName` em tudo | Menos chamadas que paginar por fase (30 por página) e consumo identificado no API Usage Stats                                             |
+| Cloudflare Workers gratuito                            | Não desliga por ociosidade nem apaga dados; arquivos estáticos não gastam CPU                                                             |
 
 ## Volume e desempenho
 
@@ -43,7 +43,9 @@ Navegador (pipe view)           Cloudflare Worker
 - Nenhum token no código ou no repositório. O segredo do webhook fica em `wrangler secret`.
 - O app só pode ser exibido dentro de `https://app.pipefy.com` (`frame-ancestors`).
 - O Worker guarda só id de card, ação e hora, por 30 dias.
-- O webhook é aceito só com o segredo na URL e para pipes da lista `ALLOWED_PIPE_IDS`.
+- O webhook é aceito só com o segredo (header `X-Webhook-Secret`, ou no caminho como alternativa), para pipes da lista `ALLOWED_PIPE_IDS`, com id de card numérico e ação conhecida.
+- `/api/changes` exige o token do usuário, validado na API do Pipefy, e só responde CORS para as origens de `ALLOWED_ORIGINS` (em produção o app tem a mesma origem do Worker).
+- A consulta de cards por id usa variáveis GraphQL, nunca ids concatenados no texto.
 
 ## Limitações
 

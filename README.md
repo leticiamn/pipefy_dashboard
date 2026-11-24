@@ -63,17 +63,33 @@ Por fim, registre o app no Pipefy com `https://<seu-worker>.workers.dev/manifest
 
 O app roda no navegador, dentro da pipe view do Pipefy. Os cards são lidos com `p.query` do SDK, que executa como o usuário logado e com as permissões dele, guardados no IndexedDB do navegador (uma base por usuário e por pipe) e agregados num Web Worker. Um Cloudflare Worker pequeno serve os arquivos do app, recebe os webhooks do pipe e informa quais cards mudaram.
 
-```
-Pipefy (API GraphQL, webhooks)
-   │ p.query como o usuário            │ webhooks (card criado, movido, alterado, concluído, excluído)
-   ▼                                   ▼
-Navegador (pipe view)           Cloudflare Worker
-  Sync ──► IndexedDB por usuário   D1: id do card + ação + hora
-   ▲          │                    GET /api/changes (token de p.getAuthToken)
-   │          ▼                        │
-   │      Web Worker de agregação      │
-   │          │                        │
-   │      Painel e construtor ◄────────┘ ids alterados → busca só esses cards
+```mermaid
+flowchart LR
+  subgraph Pipefy["Pipefy"]
+    API["API GraphQL"]
+    WH["Webhooks do pipe"]
+  end
+
+  subgraph Browser["Navegador (pipe view)"]
+    Sync["Sincronização"]
+    IDB[("IndexedDB<br/>uma base por usuário e pipe")]
+    Agg["Web Worker de agregação"]
+    UI["Painel e construtor de visões"]
+  end
+
+  subgraph CF["Cloudflare Worker"]
+    Hook["POST /webhooks/pipefy"]
+    D1[("D1<br/>id do card, ação e hora")]
+    Changes["GET /api/changes"]
+  end
+
+  API -- "p.query como o usuário" --> Sync
+  Sync --> IDB --> Agg --> UI
+  WH -- "card criado, movido, alterado,<br/>concluído ou excluído" --> Hook --> D1
+  Sync -- "token de p.getAuthToken()" --> Changes
+  Changes -- "lê" --> D1
+  Changes -- "ids alterados" --> Sync
+  Changes -. "valida o token" .-> API
 ```
 
 ### Decisões

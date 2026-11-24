@@ -14,7 +14,7 @@
       "binding": "DB",
       "database_name": "pipefy-dashboard",
       // Preencha com o id mostrado por: npx wrangler d1 create pipefy-dashboard
-      "database_id": "00000000-0000-0000-0000-000000000000",
+      "database_id": "1f0a14ef-a746-4398-ba61-6001761dd4be",
       "migrations_dir": "worker/migrations",
     },
   ],

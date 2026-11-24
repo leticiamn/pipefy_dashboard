@@ -1,0 +1,80 @@
+:root {
+  --bg: #f4f5f8;
+  --surface: #ffffff;
+  --border: #e3e6ec;
+  --text: #1f2430;
+  --muted: #687082;
+  --accent: #3b5bdb;
+  --accent-ink: #ffffff;
+  --danger: #c92a2a;
+  font-family: Inter, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  color: var(--text);
+  background: var(--bg);
+}
+
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--bg); }
+h1 { font-size: 20px; margin: 0; }
+h2 { font-size: 18px; margin: 0 0 16px; }
+button {
+  font: inherit; font-size: 14px; padding: 8px 14px; border-radius: 8px;
+  border: 1px solid var(--border); background: var(--surface); color: var(--text); cursor: pointer;
+}
+button:hover:not(:disabled) { border-color: var(--accent); }
+button:disabled { opacity: 0.5; cursor: default; }
+button.primary { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
+input, select {
+  font: inherit; font-size: 14px; padding: 8px 10px; border-radius: 8px;
+  border: 1px solid var(--border); background: var(--surface); color: var(--text); width: 100%;
+}
+
+.center { display: grid; place-content: center; text-align: center; min-height: 60vh; color: var(--muted); gap: 8px; }
+.app { padding: 16px 20px 40px; }
+/* Dentro do Pipefy o iframe tem altura fixa e não rola: o painel tem a própria rolagem. */
+html, body, #root { height: 100%; }
+.app { height: 100%; overflow-y: auto; }
+.topbar { display: flex; justify-content: space-between; align-items: flex-start; gap: 16px; flex-wrap: wrap; }
+.muted { color: var(--muted); margin: 4px 0 0; font-size: 13px; }
+.badge { background: #fff3bf; color: #7a5c00; border-radius: 6px; padding: 1px 6px; font-size: 12px; margin-right: 4px; }
+.toolbar { display: flex; gap: 8px; flex-wrap: wrap; }
+
+.progress { margin-top: 12px; background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 10px 12px; }
+.progress-text { font-size: 13px; color: var(--muted); margin-bottom: 6px; }
+.progress-bar { height: 6px; background: var(--border); border-radius: 3px; overflow: hidden; }
+.progress-bar > div { height: 100%; background: var(--accent); transition: width 0.3s; }
+.progress-bar > div.indeterminate { animation: pulse 1.2s ease-in-out infinite; }
+@keyframes pulse { 50% { opacity: 0.4; } }
+.alert { margin-top: 12px; padding: 10px 12px; border-radius: 10px; background: #fff5f5; color: var(--danger); font-size: 13px; }
+
+.grid { margin-top: 8px; }
+.widget { height: 100%; display: flex; flex-direction: column; background: var(--surface); border: 1px solid var(--border); border-radius: 12px; overflow: hidden; }
+.widget-header { display: flex; justify-content: space-between; align-items: center; gap: 8px; padding: 10px 12px 0; }
+.widget-title { font-weight: 600; font-size: 14px; cursor: move; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.widget-actions { display: flex; gap: 4px; opacity: 0; transition: opacity 0.15s; }
+.widget:hover .widget-actions, .widget:focus-within .widget-actions { opacity: 1; }
+.widget-actions button { padding: 2px 8px; font-size: 12px; }
+.widget-body { flex: 1; min-height: 0; padding: 8px 12px 12px; }
+.widget-muted, .widget-error { color: var(--muted); font-size: 13px; margin: 8px 0; }
+.widget-error { color: var(--danger); }
+
+.kpi { height: 100%; display: flex; flex-direction: column; justify-content: center; }
+.kpi-value { font-size: 34px; font-weight: 700; color: var(--accent); line-height: 1.1; }
+.kpi-caption { font-size: 12px; color: var(--muted); margin-top: 4px; }
+
+.table-wrap { height: 100%; overflow: auto; }
+table { width: 100%; border-collapse: collapse; font-size: 13px; }
+th, td { text-align: left; padding: 6px 8px; border-bottom: 1px solid var(--border); }
+th { position: sticky; top: 0; background: var(--surface); color: var(--muted); font-weight: 600; }
+.num { text-align: right; font-variant-numeric: tabular-nums; }
+
+.modal-backdrop { position: fixed; inset: 0; background: rgba(20, 24, 33, 0.45); display: grid; place-items: center; z-index: 50; padding: 16px; }
+.modal { background: var(--surface); border-radius: 14px; padding: 20px; width: min(640px, 100%); max-height: 90vh; overflow: auto; display: grid; gap: 12px; }
+.modal label { display: grid; gap: 4px; font-size: 13px; color: var(--muted); }
+.modal .row { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 12px; }
+.modal fieldset { border: 1px solid var(--border); border-radius: 10px; padding: 12px; display: grid; gap: 10px; }
+.modal legend { font-size: 13px; color: var(--muted); padding: 0 4px; }
+.phase-list { display: flex; flex-wrap: wrap; gap: 6px 14px; }
+.modal label.check { display: flex; align-items: center; gap: 6px; color: var(--text); }
+.check input { width: auto; }
+.hint { font-size: 12px; color: var(--muted); margin: 0; }
+.modal-actions { display: flex; justify-content: flex-end; gap: 8px; }

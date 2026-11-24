@@ -1,0 +1,9 @@
+{
+  "name": "Pipe Dashboard",
+  "short_description": "Monte seu próprio painel de gráficos com os cards do pipe.",
+  "description": "Dashboard por usuário dentro do pipe: cada pessoa monta suas visões (barras, linha, pizza, KPI e tabela) com os dados que pode ver no Pipefy. Os cards ficam em cache no navegador e são atualizados de forma incremental.",
+  "icon": "./icon.svg",
+  "author": "Leticia Medeiros",
+  "init_url": "./",
+  "features": ["pipe-view"]
+}

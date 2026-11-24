@@ -1,0 +1,26 @@
+{
+  // Um único Worker serve o app (arquivos do build) e a API de mudanças.
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "pipefy-dashboard",
+  "main": "worker/src/index.ts",
+  "compatibility_date": "2026-10-01",
+  "assets": {
+    "directory": "./dist",
+    "binding": "ASSETS",
+    "run_worker_first": ["/api/*", "/webhooks/*"]
+  },
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "pipefy-dashboard",
+      // Preencha com o id mostrado por: npx wrangler d1 create pipefy-dashboard
+      "database_id": "00000000-0000-0000-0000-000000000000",
+      "migrations_dir": "worker/migrations"
+    }
+  ],
+  "vars": {
+    "ALLOWED_PIPE_IDS": "307436009"
+  },
+  "triggers": { "crons": ["0 6 * * *"] }
+  // Segredo do webhook (fora do repositório): npx wrangler secret put WEBHOOK_SECRET
+}
